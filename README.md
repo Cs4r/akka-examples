@@ -1,2 +1,2 @@
 # akka-examples
-nippets, examples and exercises to take advantage of Akka
+Snippets, examples and exercises to take advantage of Akka
