@@ -6,32 +6,32 @@ import akka.NotUsed;
 import akka.actor.ActorSystem;
 import akka.stream.ActorMaterializer;
 import akka.stream.Materializer;
-import akka.stream.javadsl.Sink;
 import akka.stream.javadsl.Source;
-import cs4r.labs.akka.examples.tweets.Author;
-import cs4r.labs.akka.examples.tweets.Hashtag;
-import cs4r.labs.akka.examples.tweets.Tweet;
 
 public class ReactiveTweets {
 
-	public static final Hashtag AKKA = new Hashtag("#akka");
+	public static final String AKKA = "#akka";
 
 	public static void main(String[] args) {
 		final ActorSystem system = ActorSystem.create("reactive-tweets");
 		final Materializer materializer = ActorMaterializer.create(system);
 
-		Source.from(Arrays.asList(new Tweet(new Author("juan"), 1000, "This is a test with #akka"),
-				new Tweet(new Author("pepe"), 2000, "I am trendy guys!"),
-				new Tweet(new Author("maria"), 2000, "#this #is #an #instagram #tweet"),
-				new Tweet(new Author("ilitri"), 2000, "#akka lo peta shurs")
+		//@formatter:off
+		final Source<Tweet, NotUsed> tweets = Source.from(
+				Arrays.asList(
+						new Tweet("pepe", 1000, "Wow! #akka is great"),
+						new Tweet("juan", 2000, "I am trendy, guys!"),
+						new Tweet("maria", 3000, "#This #is #an #instagram #tweet"),
+						new Tweet("ilitri", 4000, "Ou yeah! usare #akka en el foro")
+				)
+		);
+		//@formatter:on
 
-		));
+		final Source<String, NotUsed> authors = tweets.filter(t -> t.hashtags().contains(AKKA)).map(t -> t.author);
 
-		final Source<Tweet, NotUsed> tweets = null;
+		authors.runForeach(System.out::println, materializer)
+				.whenComplete((a, b) -> system.terminate());
 
-		final Source<Author, NotUsed> authors = tweets.filter(t -> t.hashtags().contains(AKKA)).map(t -> t.author);
-
-		authors.runWith(Sink.foreach(System.out::println), materializer);
 	}
 
 }
