@@ -1,11 +1,15 @@
 package cs4r.labs.akka.examples.tweets;
 
 import java.util.Arrays;
+import java.util.concurrent.CompletionStage;
 
 import akka.NotUsed;
 import akka.actor.ActorSystem;
 import akka.stream.ActorMaterializer;
 import akka.stream.Materializer;
+import akka.stream.javadsl.Keep;
+import akka.stream.javadsl.RunnableGraph;
+import akka.stream.javadsl.Sink;
 import akka.stream.javadsl.Source;
 
 public class ReactiveTweets {
@@ -27,9 +31,19 @@ public class ReactiveTweets {
 		);
 		//@formatter:on
 
-		final Source<String, NotUsed> authors = tweets.filter(t -> t.hashtags().contains(AKKA)).map(t -> t.author);
+		final Source<String, NotUsed> sourceOfauthors = tweets.filter(t -> t.hashtags().contains(AKKA))
+				.map(t -> t.author);
 
-		authors.runForeach(System.out::println, materializer)
+		sourceOfauthors.runForeach(System.out::println, materializer);
+
+		final Sink<Integer, CompletionStage<Integer>> sumSink = Sink.<Integer, Integer> fold(0,
+				(acc, elem) -> acc + elem);
+
+		final RunnableGraph<CompletionStage<Integer>> counter = tweets.map(t -> 1).toMat(sumSink, Keep.right());
+
+		final CompletionStage<Integer> sum = counter.run(materializer);
+
+		sum.thenAcceptAsync(c -> System.out.println("Total tweets processed: " + c), system.dispatcher())
 				.whenComplete((a, b) -> system.terminate());
 
 	}
