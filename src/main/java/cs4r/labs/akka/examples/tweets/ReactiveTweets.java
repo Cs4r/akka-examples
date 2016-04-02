@@ -22,7 +22,7 @@ public class ReactiveTweets {
 						new Tweet("pepe", 1000, "Wow! #akka is great"),
 						new Tweet("juan", 2000, "I am trendy, guys!"),
 						new Tweet("maria", 3000, "#This #is #an #instagram #tweet"),
-						new Tweet("ilitri", 4000, "Ou yeah! usare #akka en el foro")
+						new Tweet("ilitri", 4000, "Ou yeah! usaré #akka en el foro")
 				)
 		);
 		//@formatter:on
