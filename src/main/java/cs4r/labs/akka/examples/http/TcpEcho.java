@@ -3,50 +3,34 @@ package cs4r.labs.akka.examples.http;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteOrder;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import java.util.concurrent.CompletionStage;
 
 import akka.Done;
 import akka.NotUsed;
 import akka.actor.ActorSystem;
-import akka.dispatch.OnFailure;
-import akka.dispatch.OnSuccess;
 import akka.stream.ActorMaterializer;
-import akka.stream.Attributes;
-import akka.stream.FlowShape;
-import akka.stream.Inlet;
-import akka.stream.Outlet;
 import akka.stream.javadsl.BidiFlow;
 import akka.stream.javadsl.Flow;
+import akka.stream.javadsl.Framing;
+import akka.stream.javadsl.Keep;
 import akka.stream.javadsl.Sink;
 import akka.stream.javadsl.Source;
 import akka.stream.javadsl.Tcp;
 import akka.stream.javadsl.Tcp.IncomingConnection;
+import akka.stream.javadsl.Tcp.OutgoingConnection;
 import akka.stream.javadsl.Tcp.ServerBinding;
-import akka.stream.stage.AbstractInHandler;
-import akka.stream.stage.AbstractOutHandler;
-import akka.stream.stage.GraphStage;
-import akka.stream.stage.GraphStageLogic;
 import akka.util.ByteIterator;
 import akka.util.ByteString;
 import akka.util.ByteStringBuilder;
-import cs4r.labs.akka.examples.BidiFlows;
-import cs4r.labs.akka.examples.BidiFlows.Message;
-import scala.concurrent.Future;
-import scala.runtime.BoxedUnit;
-import cs4r.labs.akka.examples.FrameParser;
 
 public class TcpEcho {
 
-	private static Flow<Message, ByteString, NotUsed> codec = Flow.of(Message.class).map(TcpEcho::toBytes)
-			.map(TcpEcho::addLengthHeader);
+	final static BidiFlow<Message, ByteString, ByteString, Message, NotUsed> codec = BidiFlow
+			.fromFunctions(TcpEcho::toBytes, TcpEcho::fromBytes);
 
-	private static Flow<ByteString, Message, NotUsed> decodec = Flow.of(ByteString.class).map(TcpEcho::fromBytes);
-
-	private static Flow<ByteString, ByteString, NotUsed> framing = Flow.of(ByteString.class).via(new FrameParser());
-
+	final static BidiFlow<ByteString, ByteString, ByteString, ByteString, NotUsed> framing = Framing.simpleFramingProtocol(5);
+	
 	/**
 	 * Use without parameters to start both client and server.
 	 *
@@ -79,6 +63,7 @@ public class TcpEcho {
 				client(system, serverAddress);
 			}
 		}
+
 	}
 
 	public static void server(ActorSystem system, InetSocketAddress serverAddress) {
@@ -86,11 +71,14 @@ public class TcpEcho {
 
 		final Sink<IncomingConnection, CompletionStage<Done>> handler = Sink.foreach(conn -> {
 			System.out.println("Client connected from: " + conn.remoteAddress());
-			
-			Flow<ByteString, ByteString, NotUsed> create = Flow.of(ByteString.class).via(decodec)
-					.<Message> map(m -> new Pong(((Ping) m).id)).via(codec).via(framing);
 
-			conn.handleWith(create, materializer);
+			BidiFlow<ByteString, Message, Message, ByteString, NotUsed> stack = codec.atop(framing).reversed();
+
+			Flow<Message, Message, NotUsed> map = Flow.of(Message.class).map(m -> new Pong(((Ping) m).id));
+
+			Flow<ByteString, ByteString, NotUsed> connectionHandler = stack.join(map);
+
+			conn.handleWith(connectionHandler, materializer);
 		});
 
 		final CompletionStage<ServerBinding> bindingFuture = Tcp.get(system)
@@ -113,14 +101,27 @@ public class TcpEcho {
 
 		Source<Message, NotUsed> source = Source.from(Arrays.asList(0, 1, 2)).<Message> map(id -> new Ping(id));
 
-		Source<ByteString, NotUsed> encodedAndFramed = source.via(codec).via(framing);
+		final BidiFlow<Message, ByteString, ByteString, Message, NotUsed> stack = codec.atop(framing);
 
-		Source<ByteString, NotUsed> responseStream = encodedAndFramed
-				.via(Tcp.get(system).outgoingConnection(serverAddress.getHostString(), serverAddress.getPort()));
+		Flow<ByteString, ByteString, CompletionStage<OutgoingConnection>> outgoingConnection = Tcp.get(system)
+				.outgoingConnection(serverAddress.getHostString(), serverAddress.getPort());
 
-		Source<Message, NotUsed> integers = responseStream.via(decodec);
+		Flow<Message, Message, NotUsed> join = stack.join(outgoingConnection);
 
-		integers.to(Sink.foreach(e -> System.out.println(e))).run(materializer);
+		Source<Message, NotUsed> reply = source.via(join);
+
+		final Sink<Message, CompletionStage<Done>> sink = Sink.foreach(System.out::println);
+
+		reply.toMat(sink, Keep.right()).run(materializer).whenComplete((sucess, failure) -> {
+
+			if (failure != null) {
+				System.out.println(failure.getMessage());
+			}
+
+			system.terminate();
+
+		});
+
 	}
 
 	public static ByteString addLengthHeader(ByteString bytes) {
