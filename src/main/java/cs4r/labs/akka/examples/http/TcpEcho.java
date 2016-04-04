@@ -126,16 +126,16 @@ public class TcpEcho {
 
 	public static ByteString addLengthHeader(ByteString bytes) {
 		final int len = bytes.size();
-		return new ByteStringBuilder().putInt(len, ByteOrder.LITTLE_ENDIAN).append(bytes).result();
+		return new ByteStringBuilder().putInt(len, ByteOrder.BIG_ENDIAN).append(bytes).result();
 	}
 
 	public static ByteString toBytes(Message msg) {
 		if (msg instanceof Ping) {
 			final int id = ((Ping) msg).id;
-			return new ByteStringBuilder().putByte((byte) 1).putInt(id, ByteOrder.LITTLE_ENDIAN).result();
+			return new ByteStringBuilder().putByte((byte) 1).putInt(id, ByteOrder.BIG_ENDIAN).result();
 		} else {
 			final int id = ((Pong) msg).id;
-			return new ByteStringBuilder().putByte((byte) 2).putInt(id, ByteOrder.LITTLE_ENDIAN).result();
+			return new ByteStringBuilder().putByte((byte) 2).putInt(id, ByteOrder.BIG_ENDIAN).result();
 		}
 	}
 
@@ -143,9 +143,9 @@ public class TcpEcho {
 		final ByteIterator it = bytes.iterator();
 		switch (it.getByte()) {
 		case 1:
-			return new Ping(it.getInt(ByteOrder.LITTLE_ENDIAN));
+			return new Ping(it.getInt(ByteOrder.BIG_ENDIAN));
 		case 2:
-			return new Pong(it.getInt(ByteOrder.LITTLE_ENDIAN));
+			return new Pong(it.getInt(ByteOrder.BIG_ENDIAN));
 		default:
 			throw new RuntimeException("message format error");
 		}
