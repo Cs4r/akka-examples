@@ -8,11 +8,6 @@ import akka.util.ByteStringBuilder;
 
 public class MessageEncoding {
 	
-	public static ByteString addLengthHeader(ByteString bytes) {
-		final int len = bytes.size();
-		return new ByteStringBuilder().putInt(len, ByteOrder.LITTLE_ENDIAN).append(bytes).result();
-	}
-
 	public static ByteString toBytes(Message msg) {
 		if (msg instanceof Ping) {
 			final int id = ((Ping) msg).id;
